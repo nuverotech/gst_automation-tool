@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+refs/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+
+# Database
+*.db
+*.sqlite
+
+# Uploads
+uploads/*
+!uploads/.gitkeep
+processed/*
+!processed/.gitkeep
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Alembic
+alembic/versions/*.pyc
+
+frontend/node_modules/

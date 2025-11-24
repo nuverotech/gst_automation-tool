@@ -1,0 +1,40 @@
+# FastAPI and Server
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Database
+sqlalchemy
+psycopg2-binary
+alembic
+
+# Celery and Redis
+celery
+redis
+
+# Excel Processing
+pandas
+openpyxl
+xlrd
+xlsxwriter
+
+# Validation and Data Processing
+pydantic
+pydantic-settings
+python-dotenv
+
+# Utilities
+python-dateutil
+pytz
+
+# Logging and Monitoring
+python-json-logger
+
+# Testing
+pytest
+pytest-asyncio
+httpx
+
+# CORS
+python-jose[cryptography]
+passlib[bcrypt]
