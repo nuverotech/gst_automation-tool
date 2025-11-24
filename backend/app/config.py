@@ -37,7 +37,9 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: str = "xlsx,xls,csv"
     
     # Template
-    TEMPLATE_PATH: str = "app/templates/gst_template.xlsx"
+    TEMPLATES_DIR: str = "app/templates"
+    DEFAULT_TEMPLATE_NAME: str = "gst_template.xlsx"
+    USER_TEMPLATES_DIR: str = "user_templates"
     
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000"

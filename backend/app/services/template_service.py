@@ -1,7 +1,9 @@
 import os
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
-from typing import Dict
+from openpyxl.cell.cell import MergedCell
+import openpyxl.cell.cell
+from typing import Dict, Optional
 import pandas as pd
 
 from app.config import settings
@@ -12,8 +14,23 @@ logger = setup_logger(__name__)
 
 class TemplateService:
     
-    def __init__(self):
-        self.template_path = settings.TEMPLATE_PATH
+    def __init__(self, custom_template_path: Optional[str] = None):
+        """
+        Initialize template service with optional custom template
+        
+        Args:
+            custom_template_path: Path to user's custom template, or None for default
+        """
+        if custom_template_path and os.path.exists(custom_template_path):
+            self.template_path = custom_template_path
+            logger.info(f"Using custom template: {custom_template_path}")
+        else:
+            # Use default template
+            self.template_path = os.path.join(
+                settings.TEMPLATES_DIR,
+                settings.DEFAULT_TEMPLATE_NAME
+            )
+            logger.info(f"Using default template: {self.template_path}")
     
     def load_template_structure(self):
         """
@@ -89,24 +106,28 @@ class TemplateService:
                     # Map data columns to template columns
                     mapped_data = self._map_columns_to_template(df, template_headers, sheet_name)
                     
-                    # Clear existing data rows (keep header)
-                    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-                        for cell in row:
-                            cell.value = None
+                    # Clear existing data rows (keep header) - handle merged cells
+                    max_row = ws.max_row
+                    if max_row > 1:  # Only if there are data rows beyond header
+                        # Delete rows instead of clearing cells (avoids merged cell issues)
+                        ws.delete_rows(2, max_row - 1)
                     
                     # Write mapped data to sheet
                     for row_idx, (_, row_data) in enumerate(mapped_data.iterrows(), start=2):
                         for col_idx, header in enumerate(template_headers, start=1):
                             cell = ws.cell(row=row_idx, column=col_idx)
                             value = row_data.get(header, None)
-                            cell.value = value
+                            
+                            # Only set value if it's not a merged cell
+                            if not isinstance(cell, openpyxl.cell.cell.MergedCell):
+                                cell.value = value
                     
                     logger.info(f"Wrote {len(mapped_data)} rows to sheet '{sheet_name}'")
                 else:
-                    # Clear data rows for empty sheets (keep header and formatting)
-                    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-                        for cell in row:
-                            cell.value = None
+                    # Clear data rows for empty sheets - handle merged cells
+                    max_row = ws.max_row
+                    if max_row > 1:  # Only if there are data rows beyond header
+                        ws.delete_rows(2, max_row - 1)
                     
                     logger.info(f"Sheet '{sheet_name}' has no data, cleared existing rows")
             
@@ -120,6 +141,7 @@ class TemplateService:
         except Exception as e:
             logger.error(f"Error creating GST file from template: {str(e)}", exc_info=True)
             raise
+
     
     def _map_columns_to_template(self, df: pd.DataFrame, template_headers: list, sheet_name: str) -> pd.DataFrame:
         """
@@ -171,3 +193,37 @@ class TemplateService:
         except Exception as e:
             logger.error(f"Error getting template sheets: {str(e)}")
             return []
+    
+    @staticmethod
+    def save_user_template(file_content: bytes, user_id: int, filename: str) -> str:
+        """
+        Save user's custom template
+        
+        Args:
+            file_content: Template file content
+            user_id: User ID
+            filename: Original filename
+        
+        Returns:
+            Path to saved template
+        """
+        try:
+            # Create user templates directory if not exists
+            user_templates_dir = settings.USER_TEMPLATES_DIR
+            os.makedirs(user_templates_dir, exist_ok=True)
+            
+            # Generate unique filename
+            from app.utils.helpers import generate_unique_filename
+            unique_filename = f"user_{user_id}_{generate_unique_filename(filename)}"
+            template_path = os.path.join(user_templates_dir, unique_filename)
+            
+            # Save file
+            with open(template_path, 'wb') as f:
+                f.write(file_content)
+            
+            logger.info(f"Saved custom template for user {user_id}: {template_path}")
+            return template_path
+        
+        except Exception as e:
+            logger.error(f"Error saving user template: {str(e)}", exc_info=True)
+            raise

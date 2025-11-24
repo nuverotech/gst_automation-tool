@@ -54,7 +54,7 @@ def process_uploaded_file(self, upload_id: int):
         parser = ExcelParser(upload.file_path)
         validator = GSTValidator()
         mapper = SheetMapper()
-        template_service = TemplateService()
+        template_service = TemplateService(upload.user.custom_template_path)
         
         logger.info(f"Processing file: {upload.file_path}")
         
