@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from app.models.upload import Upload, ProcessingStatus
 from app.schemas.upload import UploadCreate
@@ -12,6 +12,7 @@ class FileService:
     
     def create_upload(
         self,
+        user_id: int,
         filename: str,
         original_filename: str,
         file_path: str,
@@ -21,6 +22,7 @@ class FileService:
         Create new upload record
         """
         upload = Upload(
+            user_id=user_id,
             filename=filename,
             original_filename=original_filename,
             file_path=file_path,
@@ -37,6 +39,12 @@ class FileService:
         Get upload by ID
         """
         return self.db.query(Upload).filter(Upload.id == upload_id).first()
+    
+    def get_uploads_by_user(self, user_id: int) -> List[Upload]:
+        """
+        Get all uploads for a user
+        """
+        return self.db.query(Upload).filter(Upload.user_id == user_id).order_by(Upload.created_at.desc()).all()
     
     def update_task_id(self, upload_id: int, task_id: str) -> Upload:
         """

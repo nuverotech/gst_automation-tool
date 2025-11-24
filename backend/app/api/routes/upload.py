@@ -6,6 +6,8 @@ from app.database import get_db
 from app.schemas.upload import UploadResponse
 from app.schemas.response import ApiResponse
 from app.services.file_service import FileService
+from app.api.deps import get_current_active_user
+from app.models.user import User
 from app.utils.logger import setup_logger
 from app.utils.helpers import (
     generate_unique_filename,
@@ -21,6 +23,7 @@ logger = setup_logger(__name__)
 @router.post("/", response_model=ApiResponse[UploadResponse])
 async def upload_file(
     file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -58,6 +61,7 @@ async def upload_file(
         # Create upload record in database
         file_service = FileService(db)
         upload_record = file_service.create_upload(
+            user_id=current_user.id,
             filename=unique_filename,
             original_filename=file.filename,
             file_path=file_path,

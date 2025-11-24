@@ -22,6 +22,7 @@ xlsxwriter
 pydantic
 pydantic-settings
 python-dotenv
+pydantic[email]
 
 # Utilities
 python-dateutil
@@ -38,3 +39,7 @@ httpx
 # CORS
 python-jose[cryptography]
 passlib[bcrypt]
+
+# Authentication
+python-multipart
+bcrypt

@@ -6,7 +6,7 @@ import os
 
 from app.config import settings
 from app.database import init_db
-from app.api.routes import upload, status, download
+from app.api.routes import upload, status, download, auth, user  # Added auth, user
 from app.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -65,6 +65,18 @@ async def health_check():
 
 
 # Include routers
+app.include_router(
+    auth.router,
+    prefix=f"{settings.API_V1_PREFIX}/auth",
+    tags=["Authentication"]
+)
+
+app.include_router(
+    user.router,
+    prefix=f"{settings.API_V1_PREFIX}/user",
+    tags=["User"]
+)
+
 app.include_router(
     upload.router,
     prefix=f"{settings.API_V1_PREFIX}/upload",

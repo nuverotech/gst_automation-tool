@@ -3,10 +3,12 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 import os
 
-from app.api.deps import get_db_session
+from app.database import get_db
 from app.services.file_service import FileService
 from app.models.upload import ProcessingStatus
 from app.utils.logger import setup_logger
+from app.api.deps import get_current_active_user
+from app.models.user import User
 
 router = APIRouter()
 logger = setup_logger(__name__)
@@ -15,7 +17,8 @@ logger = setup_logger(__name__)
 @router.get("/{upload_id}")
 async def download_processed_file(
     upload_id: int,
-    db: Session = Depends(get_db_session)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
     """
     Download processed GST file
@@ -28,6 +31,13 @@ async def download_processed_file(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Upload with id {upload_id} not found"
+            )
+        
+        # Verify user owns this upload
+        if upload.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to access this upload"
             )
         
         if upload.status != ProcessingStatus.COMPLETED:
