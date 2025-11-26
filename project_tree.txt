@@ -1,0 +1,112 @@
+├── backend/
+│   ├── alembic/
+│   │   ├── env.py
+│   │   ├── README
+│   │   ├── script.py.mako
+│   │   └── versions/
+│   │       └── 06842673055d_baseline.py
+│   ├── alembic.ini
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── deps.py
+│   │   │   ├── routes/
+│   │   │   │   ├── auth.py
+│   │   │   │   ├── download.py
+│   │   │   │   ├── status.py
+│   │   │   │   ├── template.py
+│   │   │   │   ├── upload.py
+│   │   │   │   ├── user.py
+│   │   │   │   └── __init__.py
+│   │   │   └── __init__.py
+│   │   ├── config.py
+│   │   ├── core/
+│   │   │   ├── security.py
+│   │   │   └── __init__.py
+│   │   ├── database.py
+│   │   ├── main.py
+│   │   ├── models/
+│   │   │   ├── mapping.py
+│   │   │   ├── upload.py
+│   │   │   ├── user.py
+│   │   │   └── __init__.py
+│   │   ├── schemas/
+│   │   │   ├── response.py
+│   │   │   ├── upload.py
+│   │   │   ├── user.py
+│   │   │   └── __init__.py
+│   │   ├── services/
+│   │   │   ├── file_service.py
+│   │   │   ├── template_service.py
+│   │   │   ├── user_service.py
+│   │   │   ├── validation_service.py
+│   │   │   └── __init__.py
+│   │   ├── templates/
+│   │   │   └── Speqta_GSTR1_Template.xlsx
+│   │   ├── utils/
+│   │   │   ├── helpers.py
+│   │   │   ├── logger.py
+│   │   │   └── __init__.py
+│   │   ├── workers/
+│   │   │   ├── celery_app.py
+│   │   │   ├── tasks/
+│   │   │   │   ├── generate_template.py
+│   │   │   │   ├── process_file.py
+│   │   │   │   ├── validate_data.py
+│   │   │   │   └── __init__.py
+│   │   │   ├── utils/
+│   │   │   │   ├── excel_parser.py
+│   │   │   │   ├── gst_validator.py
+│   │   │   │   ├── sheet_mapper.py
+│   │   │   │   └── __init__.py
+│   │   │   └── __init__.py
+│   │   └── __init__.py
+│   ├── processed/
+│   ├── requirements.txt
+│   ├── tests/
+│   │   ├── test_api.py
+│   │   ├── test_tasks.py
+│   │   ├── test_validation.py
+│   │   └── __init__.py
+│   └── uploads/
+├── commands.txt
+├── frontend/
+│   ├── next-env.d.ts
+│   ├── next.config.js
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── postcss.config.js
+│   ├── public/
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── api/
+│   │   │   │   └── health/
+│   │   │   │       └── route.ts
+│   │   │   ├── dashboard/
+│   │   │   │   └── page.tsx
+│   │   │   ├── globals.css
+│   │   │   ├── layout.tsx
+│   │   │   ├── login/
+│   │   │   │   └── page.tsx
+│   │   │   ├── page.tsx
+│   │   │   └── signup/
+│   │   │       └── page.tsx
+│   │   ├── components/
+│   │   │   ├── DownloadResults.tsx
+│   │   │   ├── ErrorDisplay.tsx
+│   │   │   ├── FileHistory.tsx
+│   │   │   ├── FileUpload.tsx
+│   │   │   ├── ProcessingStatus.tsx
+│   │   │   └── TemplateManager.tsx
+│   │   ├── context/
+│   │   │   └── AuthContext.tsx
+│   │   ├── hooks/
+│   │   │   └── useFileUpload.ts
+│   │   ├── services/
+│   │   │   └── api.ts
+│   │   ├── types/
+│   │   │   └── index.ts
+│   │   └── utils/
+│   │       └── constants.ts
+│   ├── tailwind.config.js
+│   └── tsconfig.json
+└── README.md

@@ -8,7 +8,8 @@ import ProcessingStatus from '@/components/ProcessingStatus'
 import DownloadResults from '@/components/DownloadResults'
 import ErrorDisplay from '@/components/ErrorDisplay'
 import FileHistory from '@/components/FileHistory'
-import { LogOut, User, Upload as UploadIcon, History } from 'lucide-react'
+import TemplateManager from '@/components/TemplateManager'
+import { LogOut, User, Upload as UploadIcon, History, FileSpreadsheet } from 'lucide-react'
 
 export default function DashboardPage() {
   const { user, logout, loading: authLoading } = useAuth()
@@ -16,7 +17,7 @@ export default function DashboardPage() {
   const [uploadId, setUploadId] = useState<number | null>(null)
   const [status, setStatus] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'upload' | 'history'>('upload')
+  const [activeTab, setActiveTab] = useState<'upload' | 'history' | 'template'>('upload')
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -112,13 +113,24 @@ export default function DashboardPage() {
               <History className="w-5 h-5" />
               <span>File History</span>
             </button>
+            <button
+              onClick={() => setActiveTab('template')}
+              className={`${
+                activeTab === 'template'
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2`}
+            >
+              <FileSpreadsheet className="w-5 h-5" />
+              <span>Template</span>
+            </button>
           </nav>
         </div>
       </div>
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'upload' ? (
+        {activeTab === 'upload' && (
           <div className="bg-white rounded-2xl shadow-xl p-8">
             {error && <ErrorDisplay error={error} onDismiss={() => setError(null)} />}
 
@@ -149,8 +161,14 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-        ) : (
+        )}
+
+        {activeTab === 'history' && (
           <FileHistory />
+        )}
+
+        {activeTab === 'template' && (
+          <TemplateManager />
         )}
       </div>
     </div>

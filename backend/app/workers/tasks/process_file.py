@@ -53,8 +53,8 @@ def process_uploaded_file(self, upload_id: int):
         # Initialize parser and utilities
         parser = ExcelParser(upload.file_path)
         validator = GSTValidator()
-        mapper = SheetMapper()
-        template_service = TemplateService()
+        template_service = TemplateService(upload.user.custom_template_path)
+        mapper = SheetMapper(template_service=template_service)
         
         logger.info(f"Processing file: {upload.file_path}")
         
@@ -101,7 +101,8 @@ def process_uploaded_file(self, upload_id: int):
         self.update_state(state='PROGRESS', meta={'current': 75, 'status': 'Data validated'})
         
         # Generate output file from template
-        output_filename = generate_unique_filename(f"GST_Processed_{upload.original_filename}")
+        base_name, _ = os.path.splitext(upload.original_filename)
+        output_filename = generate_unique_filename(f"GST_Processed_{base_name}.xlsx")
         output_path = os.path.join(settings.PROCESSED_DIR, output_filename)
         
         logger.info(f"Creating output file from template: {output_path}")
@@ -155,8 +156,8 @@ def process_file_sync(upload_id: int, db: Session):
         # Initialize parser and utilities
         parser = ExcelParser(upload.file_path)
         validator = GSTValidator()
-        mapper = SheetMapper()
         template_service = TemplateService()
+        mapper = SheetMapper(template_service=template_service)
         
         logger.info(f"Processing file: {upload.file_path}")
         
@@ -194,7 +195,8 @@ def process_file_sync(upload_id: int, db: Session):
         logger.info(f"All sheets validated: {[(k, len(v)) for k, v in validated_data.items()]}")
         
         # Generate output file from template
-        output_filename = generate_unique_filename(f"GST_Processed_{upload.original_filename}")
+        base_name, _ = os.path.splitext(upload.original_filename)
+        output_filename = generate_unique_filename(f"GST_Processed_{base_name}.xlsx")
         output_path = os.path.join(settings.PROCESSED_DIR, output_filename)
         
         logger.info(f"Creating output file from template: {output_path}")

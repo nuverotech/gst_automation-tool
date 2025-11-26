@@ -33,11 +33,13 @@ class Settings(BaseSettings):
     # File Upload
     UPLOAD_DIR: str = "uploads"
     PROCESSED_DIR: str = "processed"
-    MAX_UPLOAD_SIZE: int = 10485760  # 10MB
-    ALLOWED_EXTENSIONS: str = "xlsx,xls,csv"
+    MAX_UPLOAD_SIZE: int = 52428800  # 50MB
+    ALLOWED_EXTENSIONS: str = "xlsx,xls,xlsb,csv"
     
     # Template
-    TEMPLATE_PATH: str = "app/templates/gst_template.xlsx"
+    TEMPLATES_DIR: str = "app/templates"
+    DEFAULT_TEMPLATE_NAME: str = "gst_template.xlsx"
+    USER_TEMPLATES_DIR: str = "user_templates"
     
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000"

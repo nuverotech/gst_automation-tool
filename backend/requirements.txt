@@ -17,6 +17,7 @@ pandas
 openpyxl
 xlrd
 xlsxwriter
+pyxlsb
 
 # Validation and Data Processing
 pydantic

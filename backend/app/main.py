@@ -6,7 +6,7 @@ import os
 
 from app.config import settings
 from app.database import init_db
-from app.api.routes import upload, status, download, auth, user  # Added auth, user
+from app.api.routes import upload, status, download, auth, user, template
 from app.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -95,6 +95,11 @@ app.include_router(
     tags=["Download"]
 )
 
+app.include_router(
+    template.router,
+    prefix=f"{settings.API_V1_PREFIX}/template",
+    tags=["Template"]
+)
 
 # Global exception handler
 @app.exception_handler(Exception)

@@ -18,7 +18,13 @@ export const useFileUpload = () => {
         throw new Error(response.error || 'Upload failed')
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error || err.message || 'Upload failed'
+      const errorMessage =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        err.response?.data?.detail?.error ||
+        err.response?.data?.detail?.message ||
+        err.message ||
+        'Upload failed'
       setError(errorMessage)
       throw new Error(errorMessage)
     } finally {

@@ -15,6 +15,8 @@ class User(Base):
     
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
+
+    custom_template_path = Column(String(500), nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
