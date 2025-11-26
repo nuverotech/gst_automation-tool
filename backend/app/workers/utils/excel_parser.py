@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from typing import Dict, List, Optional, Tuple
 import re
@@ -18,12 +19,24 @@ class ExcelParser:
         Read Excel file into DataFrame
         """
         try:
-            # Try reading with different engines
-            try:
-                self.df = pd.read_excel(self.file_path, sheet_name=sheet_name or 0, engine='openpyxl')
-            except Exception:
-                self.df = pd.read_excel(self.file_path, sheet_name=sheet_name or 0, engine='xlrd')
-            
+            engines = self._get_engine_priority()
+            last_error: Optional[Exception] = None
+            for engine in engines:
+                try:
+                    self.df = pd.read_excel(
+                        self.file_path,
+                        sheet_name=sheet_name or 0,
+                        engine=engine
+                    )
+                    last_error = None
+                    break
+                except Exception as engine_error:
+                    last_error = engine_error
+                    logger.warning(
+                        f"{engine} engine failed to read file '{self.file_path}': {engine_error}"
+                    )
+            if self.df is None:
+                raise last_error or Exception("Unable to read Excel file")
             logger.info(f"Excel file read successfully. Shape: {self.df.shape}")
             return self.df
         
@@ -143,8 +156,30 @@ class ExcelParser:
         Get all sheet names from Excel file
         """
         try:
-            xl_file = pd.ExcelFile(self.file_path)
+            engines = self._get_engine_priority()
+            last_error: Optional[Exception] = None
+            for engine in engines:
+                try:
+                    xl_file = pd.ExcelFile(self.file_path, engine=engine)
+                    break
+                except Exception as engine_error:
+                    last_error = engine_error
+                    logger.warning(
+                        f"{engine} engine failed to inspect sheets for '{self.file_path}': {engine_error}"
+                    )
+                    xl_file = None
+            if xl_file is None:
+                raise last_error or Exception("Unable to inspect Excel file")
             return xl_file.sheet_names
         except Exception as e:
             logger.error(f"Error getting sheet names: {str(e)}")
             return []
+
+    def _get_engine_priority(self) -> List[str]:
+        extension = os.path.splitext(self.file_path)[1].lower()
+        if extension == '.xlsb':
+            return ['pyxlsb']
+        if extension == '.xls':
+            return ['xlrd', 'openpyxl']
+        # Default to modern Excel formats
+        return ['openpyxl', 'xlrd']

@@ -9,9 +9,10 @@ export const API_ENDPOINTS = {
 
 export const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 export const ALLOWED_FILE_TYPES = [
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-  'text/csv',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.ms-excel', // .xls
+  'application/vnd.ms-excel.sheet.binary.macroenabled.12', // .xlsb
+  'text/csv', // .csv
 ]
 
 export const POLL_INTERVAL = 2000 // 2 seconds

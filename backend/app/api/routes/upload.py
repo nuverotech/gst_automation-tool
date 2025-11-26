@@ -12,12 +12,27 @@ from app.utils.logger import setup_logger
 from app.utils.helpers import (
     generate_unique_filename,
     is_allowed_file,
-    validate_file_size
+    validate_file_size,
+    get_allowed_extensions_display,
+    get_file_size_mb,
+    get_max_upload_limit
 )
 from app.config import settings
+from fastapi.responses import JSONResponse
 
 router = APIRouter()
 logger = setup_logger(__name__)
+
+
+def _validation_error(message: str, error_code: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content=ApiResponse[UploadResponse](
+            success=False,
+            message=message,
+            error=error_code
+        ).model_dump()
+    )
 
 
 @router.post("/", response_model=ApiResponse[UploadResponse])
@@ -32,9 +47,9 @@ async def upload_file(
     try:
         # Validate file extension
         if not is_allowed_file(file.filename):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File type not allowed. Allowed types: {settings.ALLOWED_EXTENSIONS}"
+            return _validation_error(
+                f"File type not allowed. Supported formats: {get_allowed_extensions_display()}",
+                "FILE_TYPE_NOT_ALLOWED"
             )
         
         # Read file content to get size
@@ -43,9 +58,11 @@ async def upload_file(
         
         # Validate file size
         if not validate_file_size(file_size):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File size exceeds maximum allowed size of {settings.MAX_UPLOAD_SIZE / (1024*1024)}MB"
+            max_limit_mb = get_file_size_mb(get_max_upload_limit())
+            actual_size_mb = get_file_size_mb(file_size)
+            return _validation_error(
+                f"File size {actual_size_mb}MB exceeds the {max_limit_mb}MB limit",
+                "FILE_TOO_LARGE"
             )
         
         # Generate unique filename

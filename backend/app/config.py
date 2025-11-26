@@ -33,8 +33,8 @@ class Settings(BaseSettings):
     # File Upload
     UPLOAD_DIR: str = "uploads"
     PROCESSED_DIR: str = "processed"
-    MAX_UPLOAD_SIZE: int = 10485760  # 10MB
-    ALLOWED_EXTENSIONS: str = "xlsx,xls,csv"
+    MAX_UPLOAD_SIZE: int = 52428800  # 50MB
+    ALLOWED_EXTENSIONS: str = "xlsx,xls,xlsb,csv"
     
     # Template
     TEMPLATES_DIR: str = "app/templates"

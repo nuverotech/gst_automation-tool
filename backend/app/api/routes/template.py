@@ -27,10 +27,10 @@ async def upload_custom_template(
     """
     try:
         # Validate file type
-        if not file.filename.endswith(('.xlsx', '.xls')):
+        if not file.filename.lower().endswith(('.xlsx', '.xls', '.xlsb')):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only Excel files (.xlsx, .xls) are allowed"
+                detail="Only Excel files (.xlsx, .xls, .xlsb) are allowed"
             )
         
         # Read file content

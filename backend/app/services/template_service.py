@@ -3,7 +3,7 @@ from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.cell.cell import MergedCell
 import openpyxl.cell.cell
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Tuple
 import pandas as pd
 
 from app.config import settings
@@ -43,18 +43,17 @@ class TemplateService:
             for sheet_name in wb.sheetnames:
                 ws = wb[sheet_name]
                 
-                # Get headers from first row
-                headers = []
-                for cell in ws[1]:
-                    if cell.value:
-                        headers.append(cell.value)
+                header_row, headers = self._extract_headers(ws)
                 
                 structure[sheet_name] = {
                     'headers': headers,
-                    'row_count': ws.max_row
+                    'row_count': ws.max_row,
+                    'header_row': header_row or 1
                 }
                 
-                logger.info(f"Sheet '{sheet_name}' has columns: {headers}")
+                logger.info(
+                    f"Sheet '{sheet_name}' header row {header_row or 1}: {headers}"
+                )
             
             wb.close()
             return structure
@@ -89,11 +88,16 @@ class TemplateService:
                 
                 logger.info(f"Processing sheet: {sheet_name}")
                 
-                # Get headers from template
-                template_headers = []
-                for cell in ws[1]:
-                    if cell.value:
-                        template_headers.append(str(cell.value).strip())
+                sheet_info = template_structure.get(sheet_name, {})
+                header_row = sheet_info.get('header_row', 1)
+                template_headers = sheet_info.get('headers', [])
+                
+                if not template_headers:
+                    template_headers = [
+                        str(cell.value).strip()
+                        for cell in ws[header_row]
+                        if cell.value
+                    ]
                 
                 logger.info(f"Template headers for '{sheet_name}': {template_headers}")
                 
@@ -108,12 +112,12 @@ class TemplateService:
                     
                     # Clear existing data rows (keep header) - handle merged cells
                     max_row = ws.max_row
-                    if max_row > 1:  # Only if there are data rows beyond header
+                    if max_row > header_row:  # Only if there are data rows beyond header
                         # Delete rows instead of clearing cells (avoids merged cell issues)
-                        ws.delete_rows(2, max_row - 1)
+                        ws.delete_rows(header_row + 1, max_row - header_row)
                     
                     # Write mapped data to sheet
-                    for row_idx, (_, row_data) in enumerate(mapped_data.iterrows(), start=2):
+                    for row_idx, (_, row_data) in enumerate(mapped_data.iterrows(), start=header_row + 1):
                         for col_idx, header in enumerate(template_headers, start=1):
                             cell = ws.cell(row=row_idx, column=col_idx)
                             value = row_data.get(header, None)
@@ -126,8 +130,8 @@ class TemplateService:
                 else:
                     # Clear data rows for empty sheets - handle merged cells
                     max_row = ws.max_row
-                    if max_row > 1:  # Only if there are data rows beyond header
-                        ws.delete_rows(2, max_row - 1)
+                    if max_row > header_row:  # Only if there are data rows beyond header
+                        ws.delete_rows(header_row + 1, max_row - header_row)
                     
                     logger.info(f"Sheet '{sheet_name}' has no data, cleared existing rows")
             
@@ -193,6 +197,64 @@ class TemplateService:
         except Exception as e:
             logger.error(f"Error getting template sheets: {str(e)}")
             return []
+
+    @staticmethod
+    def _clean_header_value(value) -> Optional[str]:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            cleaned = value.strip()
+            return cleaned or None
+        return str(value)
+
+    def _extract_headers(self, worksheet) -> Tuple[Optional[int], List[str]]:
+        """
+        Detect the actual header row by skipping summary/help/formula rows.
+        """
+        max_row = min(worksheet.max_row, 50)
+        for row_idx, row in enumerate(
+            worksheet.iter_rows(min_row=1, max_row=max_row), start=1
+        ):
+            values = [
+                self._clean_header_value(cell.value)
+                for cell in row
+                if self._clean_header_value(cell.value)
+            ]
+            if not values:
+                continue
+            if self._should_skip_row(values):
+                continue
+            return row_idx, values
+        # Fallback to row 1 if nothing suitable is found
+        fallback_headers = [
+            self._clean_header_value(cell.value)
+            for cell in worksheet[1]
+            if self._clean_header_value(cell.value)
+        ]
+        return 1, fallback_headers
+
+    @staticmethod
+    def _should_skip_row(values: List[str]) -> bool:
+        """
+        Identify rows that represent summaries or formulas instead of headers.
+        """
+        normalized = [
+            str(value).strip().lower()
+            for value in values
+            if str(value).strip()
+        ]
+        if not normalized:
+            return True
+        if len(normalized) == 1:
+            return True
+        if all(val.startswith('=') for val in normalized):
+            return True
+        if any('summary' in val or 'help' in val for val in normalized):
+            return True
+        metric_tokens = ('no. of', 'total ', 'grand total')
+        if all(any(token in val for token in metric_tokens) for val in normalized):
+            return True
+        return False
     
     @staticmethod
     def save_user_template(file_content: bytes, user_id: int, filename: str) -> str:

@@ -23,7 +23,8 @@ export default function FileUpload({ onUploadSuccess, onUploadError }: FileUploa
 
       // Validate file size
       if (file.size > MAX_FILE_SIZE) {
-        onUploadError('File size exceeds 10MB limit')
+        const limitMb = (MAX_FILE_SIZE / (1024 * 1024)).toFixed(0)
+        onUploadError(`File size exceeds the ${limitMb}MB limit`)
         return
       }
 
@@ -44,6 +45,7 @@ export default function FileUpload({ onUploadSuccess, onUploadError }: FileUploa
     accept: {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
       'application/vnd.ms-excel': ['.xls'],
+      'application/vnd.ms-excel.sheet.binary.macroenabled.12': ['.xlsb'],
       'text/csv': ['.csv'],
     },
     maxFiles: 1,
@@ -90,8 +92,8 @@ export default function FileUpload({ onUploadSuccess, onUploadError }: FileUploa
               </div>
 
               <div className="text-xs text-gray-400 space-y-1">
-                <p>Supported formats: XLSX, XLS, CSV</p>
-                <p>Maximum file size: 50MB</p>
+                <p>Supported formats: XLSX, XLS, XLSB, CSV</p>
+                <p>Maximum file size: {(MAX_FILE_SIZE / (1024 * 1024)).toFixed(0)}MB</p>
               </div>
             </>
           )}
