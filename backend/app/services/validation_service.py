@@ -3,9 +3,10 @@ from typing import Optional, Tuple
 
 
 class ValidationService:
+    VALID_STATE_CODES = {f"{code:02d}" for code in range(1, 39)} | {'97', '98', '99'}
     
-    @staticmethod
-    def validate_gstin(gstin: str) -> Tuple[bool, Optional[str]]:
+    @classmethod
+    def validate_gstin(cls, gstin: str) -> Tuple[bool, Optional[str]]:
         """
         Validate GSTIN format
         Format: 2 digits (state code) + 10 characters (PAN) + 1 digit (entity number) + Z + 1 checksum
@@ -25,7 +26,39 @@ class ValidationService:
         if not re.match(pattern, gstin):
             return False, "Invalid GSTIN format"
         
+        state_code = gstin[:2]
+        if state_code not in cls.VALID_STATE_CODES:
+            return False, "Invalid GST state code"
+        
+        if not cls._validate_gstin_checksum(gstin):
+            return False, "GSTIN checksum failed"
+        
         return True, None
+    
+    @staticmethod
+    def _gstin_char_value(char: str) -> int:
+        if char.isdigit():
+            return int(char)
+        return ord(char) - ord('A') + 10
+    
+    @classmethod
+    def _validate_gstin_checksum(cls, gstin: str) -> bool:
+        if len(gstin) != 15:
+            return False
+        data = gstin[:14]
+        check_digit = gstin[-1]
+        product = 0
+        multiplier = 2
+        for char in reversed(data):
+            try:
+                value = cls._gstin_char_value(char)
+            except ValueError:
+                return False
+            product = (product + (value * multiplier)) % 11
+            multiplier = (multiplier % 9) + 2
+        calculated = (11 - product) % 11
+        expected = str(calculated) if calculated < 10 else chr(ord('A') + (calculated - 10))
+        return expected == check_digit
     
     @staticmethod
     def validate_pan(pan: str) -> Tuple[bool, Optional[str]]:
