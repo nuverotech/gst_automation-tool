@@ -106,3 +106,11 @@ def get_rule_book() -> GSTR1RuleBook:
 
 
 
+
+
+
+
+
+
+
+

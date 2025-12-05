@@ -1,5 +1,6 @@
 import re
 from typing import Optional, Tuple
+import pandas as pd
 
 
 class ValidationService:
@@ -114,10 +115,100 @@ class ValidationService:
     @staticmethod
     def validate_date(date_str: str) -> Tuple[bool, Optional[str]]:
         """
-        Validate date format
+        Validate and standardize date format.
+        Supports multiple formats: DD-MMM-YYYY, DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, MM/DD/YYYY, DDMMYYYY
         """
         if not date_str:
             return False, "Date is required"
         
-        # Will be enhanced based on actual date formats in data
+        import pandas as pd
+        from datetime import datetime
+        
+        # List of supported formats
+        supported_formats = [
+            "%d-%b-%Y",  # 24-May-2017
+            "%d/%m/%Y",  # 24/05/2017
+            "%d-%m-%Y",  # 24-05-2017
+            "%Y-%m-%d",  # 2017-05-24
+            "%m/%d/%Y",  # 05/24/2017 (US)
+            "%d%m%Y",    # 24052017
+        ]
+        
+        parsed_date = None
+        for fmt in supported_formats:
+            try:
+                parsed_date = datetime.strptime(str(date_str).strip(), fmt)
+                break
+            except ValueError:
+                continue
+        
+        # Try pandas date parser as fallback
+        if not parsed_date:
+            try:
+                parsed_date = pd.to_datetime(date_str)
+            except Exception:
+                return False, f"Unsupported date format: {date_str}"
+        
+        # Validate date is not in the future
+        if parsed_date > datetime.now():
+            return False, "Future date not allowed"
+        
+        # Validate it's a valid calendar date
+        try:
+            # Check if the date is valid
+            if parsed_date.year < 1900 or parsed_date.year > 2100:
+                return False, "Invalid year"
+        except Exception:
+            return False, "Invalid calendar date"
+        
         return True, None
+    
+    @staticmethod
+    def validate_and_round_amount(amount, field_name: str = "Amount") -> Tuple[bool, Optional[str], Optional[float]]:
+        """
+        Validate amount and round to 2 decimal places.
+        Returns: (is_valid, error_message, rounded_value)
+        """
+        if amount is None or (isinstance(amount, float) and pd.isna(amount)):
+            return False, f"{field_name} cannot be empty", None
+        
+        # Try to convert to numeric
+        try:
+            numeric_value = float(amount)
+        except (ValueError, TypeError):
+            return False, f"{field_name} is not numeric: {amount}", None
+        
+        # Check range
+        if numeric_value < 0:
+            return False, f"{field_name} cannot be negative", None
+        
+        if numeric_value > 999999999.99:
+            return False, f"{field_name} exceeds maximum allowed value", None
+        
+        # Round to 2 decimals
+        rounded_value = round(numeric_value, 2)
+        
+        return True, None, rounded_value
+    
+    @staticmethod
+    def format_date_standard(date_value, output_format: str = "%d-%b-%Y") -> Optional[str]:
+        """
+        Format date to standard output format (dd-MMM-yyyy by default).
+        E.g., 24-May-2017
+        """
+        import pandas as pd
+        from datetime import datetime
+        
+        if not date_value or pd.isna(date_value):
+            return None
+        
+        try:
+            if isinstance(date_value, (datetime, pd.Timestamp)):
+                parsed_date = date_value
+            else:
+                # Try to parse using pandas
+                parsed_date = pd.to_datetime(date_value)
+            
+            return parsed_date.strftime(output_format)
+        except Exception:
+            return str(date_value)
