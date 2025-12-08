@@ -114,7 +114,7 @@ DATA_COLUMN_KEYWORDS: Dict[str, List[str]] = {
     'igst_rate': ['igst tax%', 'igst%', 'igst rate'],
     'cgst_rate': ['cgst tax%', 'cgst%', 'cgst rate'],
     'sgst_rate': ['sgst tax%', 'sgst%', 'sgst rate'],
-    'rate': ['tax rate', 'tax percent', 'rate'],
+    'rate': ['total tax%','tax rate', 'tax percent', 'rate'],
     'igst_amount': ['igst amount'],
     'cgst_amount': ['cgst amount'],
     'sgst_amount': ['sgst amount'],
@@ -320,11 +320,14 @@ class SheetMapper:
             self._set_field(payload, 'b2b', 'reverse_charge', 'N')
             self._set_field(payload, 'b2b', 'invoice_type', row['_invoice_type'])
             self._set_field(payload, 'b2b', 'ecommerce_gstin', row['_ecommerce_gstin'])
-            self._set_field(payload, 'b2b', 'rate', row['_rate'])
+            self._set_field(payload, 'b2b', 'rate', '18')
             self._set_field(payload, 'b2b', 'taxable_value', self._round_money(row['_taxable_value']))
             self._set_field(payload, 'b2b', 'cess_amount', self._round_money(abs(row['_cess_amount']) if row['_cess_amount'] is not None else None))
             if payload:
                 rows.append(payload)
+
+        logger.info("B2B Rows", extra={"rows": rows})
+
         return sheet_name, self._build_sheet_dataframe(rows, sheet_name)
     
     def _build_b2cl(self, df: pd.DataFrame) -> Tuple[Optional[str], pd.DataFrame]:

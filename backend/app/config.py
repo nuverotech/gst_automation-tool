@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     TEMPLATES_DIR: str = "app/templates"
     DEFAULT_TEMPLATE_NAME: str = "gst_template.xlsx"
     USER_TEMPLATES_DIR: str = "user_templates"
+
+    # NEW: GSTR1 template for your new engine
+    DEFAULT_GSTR1_TEMPLATE: str = "app/templates/gst_template.xlsx"
     
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000"
