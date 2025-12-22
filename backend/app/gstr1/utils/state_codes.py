@@ -54,6 +54,23 @@ STATE_DATA = [
     ("OT", "97", "Other Territory", ["other territory", "ot"]),
 ]
 
+# Build mapping for ANY input -> 2-digit GST state code
+STATE_TO_CODE = {}
+
+for abbr, code, full_name, aliases in STATE_DATA:
+    # Abbreviation → code
+    STATE_TO_CODE[abbr.upper()] = code
+
+    # Full name → code
+    STATE_TO_CODE[full_name.upper()] = code
+
+    # Numeric code (e.g., "27") → code
+    STATE_TO_CODE[code] = code
+
+    # Aliases → code
+    for alias in aliases:
+        STATE_TO_CODE[alias.upper()] = code
+
 
 STATE_DETAILS: Dict[str, StateInfo] = {
     code: StateInfo(code=numeric, name=name) for code, numeric, name, _ in STATE_DATA
@@ -108,3 +125,60 @@ def format_place_of_supply(state_code: Optional[str]) -> Optional[str]:
     if not detail:
         return state_code
     return f"{detail.code}-{detail.name}"
+
+def normalize_pos_code(raw):
+    """
+    Convert user POS like 'OT' → GST state code 'OT'.
+    Sheet writer will then convert it to '97-Other Territory' or '96-Other Territory' as required.
+    """
+    if raw is None:
+        return None
+
+    raw = str(raw).strip().upper()
+
+    # User writes "OT" meaning Other Territory
+    if raw == "OT":
+        return "OT"   # return the STATE CODE, not numeric
+
+    # Otherwise, return raw POS which will be mapped by state_code_from_value()
+    return raw
+
+def get_normalized_state_pos(raw):
+    """
+    Full POS normalization pipeline:
+    Raw string → normalized (OT handling) → internal state code → used in GSTR output.
+    """
+    # Step 1: normalize OT or any custom alias
+    raw_norm = normalize_pos_code(raw)
+
+    # Step 2: convert to valid state code (MH, KA, OT, etc.)
+    state_code = state_code_from_value(raw_norm)
+
+    return state_code
+
+def normalize_state_code(value):
+    """
+    Convert state input (abbr/name/code/alias) → 2-digit GST state code.
+    Returns None if unknown.
+    """
+    if not value:
+        return None
+    key = str(value).strip().upper()
+    return STATE_TO_CODE.get(key)
+
+def is_same_state(pos, source):
+    """
+    Returns True if POS and Source of Supply represent the same state.
+    Handles:
+        - MH ↔ Maharashtra ↔ 27
+        - KA ↔ Karnataka ↔ 29
+        - OT ↔ Other Territory ↔ 97
+    """
+    p = normalize_state_code(pos)
+    s = normalize_state_code(source)
+
+    if not p or not s:
+        return False
+
+    return p == s
+

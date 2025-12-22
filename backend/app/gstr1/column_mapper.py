@@ -47,6 +47,17 @@ DATA_COLUMN_KEYWORDS: Dict[str, List[str]] = {
     "ecommerce_gstin": ["e-commerce gstin", "ecommerce gstin", "eco gstin"],
     "unique_type": ["unique", "transaction type"],
     "export_flag": ["export"],
+    "export_type": ["export type", "exp type", "type of export", "wpay", "wopay"],
+    "port_code": ["port code", "shipping port", "port"],
+    "shipping_bill_number": ["shipping bill number", "sb number", "shipping bill no"],
+    "shipping_bill_date": ["shipping bill date", "sb date"],
+    "hsn": ["hsn", "hsn code"],
+    "description": ["description", "product name", "item name"],
+    "uqc": ["uqc", "unit", "unit quantity", "quantity unit"],
+    "quantity": ["quantity", "item quantity", "qty"],
+    "total_value": ["total value", "value", "invoice line total"],
+    "source_of_supply": ["source of supply", "source state", "state of supply"],
+
 }
 
 
@@ -184,3 +195,38 @@ class ColumnMapper:
         if col and col in row:
             return row[col]
         return None
+
+    def _map_doc_type(self, row):
+        """
+        Convert raw 'Doc Type' column → internal flags
+        """
+
+        doc = str(row.get("Doc Type", "")).strip().lower()
+
+        # Base flags
+        row["_is_credit_or_debit"] = False
+        row["_is_ur_note"] = False
+        row["_note_type"] = None
+
+        # ---------------------------
+        # CREDIT / DEBIT NOTES (REGISTERED → CDNR)
+        # ---------------------------
+        if doc in ["credit note", "debit note", "cn", "dn"]:
+            row["_is_credit_or_debit"] = True
+            row["_note_type"] = "C" if "credit" in doc else "D"
+            return row
+
+        # ---------------------------
+        # CREDIT / DEBIT NOTES (UNREGISTERED → CDNUR)
+        # ---------------------------
+        if doc in ["ur credit note", "ur debit note", "ur cn", "ur dn"]:
+            row["_is_credit_or_debit"] = True
+            row["_is_ur_note"] = True
+            row["_note_type"] = "C" if "credit" in doc else "D"
+            return row
+
+        # ---------------------------
+        # INVOICES
+        # ---------------------------
+        row["_note_type"] = None
+        return row

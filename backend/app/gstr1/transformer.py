@@ -5,7 +5,7 @@ import pandas as pd
 from app.gstr1.column_mapper import ColumnMapper
 from app.gstr1.utils.gst_utils import safe_string, to_float, round_money, is_valid_gstin
 from app.gstr1.utils.date_utils import parse_excel_or_date
-from app.gstr1.utils.state_codes import state_code_from_value
+from app.gstr1.utils.state_codes import is_same_state, state_code_from_value
 
 
 class GSTTransformer:
@@ -92,6 +92,11 @@ class GSTTransformer:
             lambda r: state_code_from_value(mapper.get_value(r, "source_of_supply")),
             axis=1,
         )
+
+        # Alias required by builders (B2CL, B2CS)
+        working["_source_of_supply"] = working["_source_state_code"]
+        working["_supplier_state"] = working["_source_state_code"]
+
         working["_is_interstate"] = working.apply(
             lambda r: bool(
                 r["_pos_code"]
@@ -126,17 +131,17 @@ class GSTTransformer:
         working["_note_value"] = working.apply(
             lambda r: self._resolve_note_value(r, mapper), axis=1
         )
-        working["_note_type"] = working.apply(
-            lambda r: self._determine_note_type(
-                r["_doc_type"], r["_supply_text"], r["_note_value"]
-            ),
+        working["_note_type"] = working["_note_value"].apply(self._derive_note_type)
+
+        working["_is_credit_or_debit"] = working["_doc_type"].apply(
+            lambda x: self._is_credit_or_debit(x)
+        )
+
+        working["_is_ur_note"] = working.apply(
+            lambda r: (not r["_has_valid_gstin"]) and r["_is_credit_or_debit"],
             axis=1,
         )
-        working["_is_credit_or_debit"] = working.apply(
-            lambda r: self._is_credit_or_debit(r["_doc_type"], r["_supply_text"])
-            or bool(r["_note_type"]),
-            axis=1,
-        )
+
 
         # Export
         working["_is_export"] = working.apply(
@@ -145,6 +150,58 @@ class GSTTransformer:
         working["_export_type"] = working.apply(
             lambda r: self._resolve_export_type(r), axis=1
         )
+
+        # -------------------------------------
+        # Period (Month + Year) for CDNUR
+        # -------------------------------------
+        working["_period_month"] = working["_invoice_date"].apply(
+            lambda d: d.month if d is not None else None
+        )
+
+        working["_period_year"] = working["_invoice_date"].apply(
+            lambda d: d.year if d is not None else None
+        )
+
+        # ------------------------------------------
+        # HSN / Description / Quantity / UQC / Taxes
+        # ------------------------------------------
+
+        def get_safe(colname):
+            return working.apply(lambda r: safe_string(mapper.get_value(r, colname)), axis=1)
+
+        def get_float(colname):
+            return working.apply(lambda r: to_float(mapper.get_value(r, colname)) or 0.0, axis=1)
+
+        working["_hsn"] = get_safe("hsn")
+        working["_description"] = get_safe("description")
+        working["_uqc"] = get_safe("uqc")
+
+        working["_quantity"] = working.apply(
+            lambda r: to_float(mapper.get_value(r, "quantity")) or 0.0,
+            axis=1,
+        )
+
+        working["_total_value"] = working.apply(
+            lambda r: to_float(mapper.get_value(r, "invoice_value"))
+                    or to_float(mapper.get_value(r, "gross_amount"))
+                    or r["_invoice_value"]
+                    or 0.0,
+            axis=1,
+        )
+
+        working["_igst_amount"] = get_float("igst_amount")
+        working["_cgst_amount"] = get_float("cgst_amount")
+        working["_sgst_amount"] = get_float("sgst_amount")
+        working["_cess_amount"] = get_float("cess_amount")
+
+        mask_wopay = working["_is_export"] & (working["_export_type"] == "WOPAY")
+        working.loc[mask_wopay, "_rate"] = 0
+
+        working["_is_same_state"] = working.apply(
+            lambda r: is_same_state(r["_pos_code"], r["_source_state_code"]),
+            axis=1,
+        )
+
 
         return working
 
@@ -170,6 +227,7 @@ class GSTTransformer:
         if invoice_value is None or not is_interstate:
             return False
         return abs(invoice_value) > 250000
+    
 
     # amounts
 
@@ -217,24 +275,61 @@ class GSTTransformer:
         return invoice_value - tax_total
 
     def _resolve_rate(self, row: pd.Series, mapper: ColumnMapper) -> Optional[float]:
+        """
+        Determine GST rate using all possible sources:
+        1. IGST TAX% column
+        2. CGST TAX% + SGST TAX% columns
+        3. igst_rate / cgst_rate / sgst_rate columns (if present)
+        4. generic 'rate' column
+        5. Derived from tax_total / taxable_value
+        """
+
+        # -------------------------
+        # 1. Try TAX% columns (from your actual file)
+        # -------------------------
+        igst_pct = to_float(mapper.get_value(row, "igst_tax%"))
+        cgst_pct = to_float(mapper.get_value(row, "cgst_tax%"))
+        sgst_pct = to_float(mapper.get_value(row, "sgst_tax%"))
+
+        if igst_pct is not None:
+            return igst_pct
+
+        if cgst_pct is not None or sgst_pct is not None:
+            return (cgst_pct or 0) + (sgst_pct or 0)
+
+        # -------------------------
+        # 2. Try rate columns (older formats)
+        # -------------------------
         igst_rate = to_float(mapper.get_value(row, "igst_rate"))
-        if igst_rate:
+        if igst_rate is not None:
             return igst_rate
-        cgst_rate = to_float(mapper.get_value(row, "cgst_rate")) or 0
-        sgst_rate = to_float(mapper.get_value(row, "sgst_rate")) or 0
-        if cgst_rate or sgst_rate:
-            return cgst_rate + sgst_rate
+
+        cgst_rate = to_float(mapper.get_value(row, "cgst_rate"))
+        sgst_rate = to_float(mapper.get_value(row, "sgst_rate"))
+        if (cgst_rate is not None) or (sgst_rate is not None):
+            return (cgst_rate or 0) + (sgst_rate or 0)
+
+        # -------------------------
+        # 3. Try generic "rate"
+        # -------------------------
         generic = to_float(mapper.get_value(row, "rate"))
-        if generic:
+        if generic is not None:
             return generic
+
+        # -------------------------
+        # 4. Last fallback → derive from tax_total / taxable_value
+        # -------------------------
         taxable = to_float(mapper.get_value(row, "taxable_value"))
         tax_total = row.get("_tax_total")
+
         if taxable and tax_total:
             try:
                 return round((tax_total / taxable) * 100, 2)
             except ZeroDivisionError:
                 return None
+
         return None
+
 
     def _resolve_cess_amount(self, row: pd.Series, mapper: ColumnMapper) -> float:
         v = to_float(mapper.get_value(row, "cess_amount"))
@@ -257,18 +352,27 @@ class GSTTransformer:
         return None
 
     @staticmethod
-    def _determine_note_type(doc_type: str, supply_text: str, note_value: Optional[float]) -> Optional[str]:
-        lowered = f"{doc_type or ''} {supply_text or ''}".lower()
-        if "credit" in lowered or "cn" in lowered:
-            return "C"
-        if "debit" in lowered or "dn" in lowered:
-            return "D"
-        return None
+    def _derive_note_type(note_value: float) -> str:
+        if note_value is None:
+            return None
+        return "C" if note_value > 0 else "D"
 
     @staticmethod
-    def _is_credit_or_debit(doc_type: str, supply_text: str) -> bool:
-        lowered = f"{doc_type or ''} {supply_text or ''}".lower()
-        return any(k in lowered for k in ("credit", "debit", "cn", "dn"))
+    def _is_credit_or_debit(doc_type: str) -> bool:
+        """
+        Strict credit/debit note detection based ONLY on doc_type.
+        """
+        lowered = (doc_type or "").strip().lower()
+
+        return lowered in (
+            "credit notes",
+            "credit",
+            "cn",
+            "debit note",
+            "debit",
+            "dn",
+        )
+
 
     @staticmethod
     def _detect_sez(supply_text: str) -> bool:
@@ -285,26 +389,56 @@ class GSTTransformer:
         return "Regular"
 
     def _detect_export(self, row: pd.Series, mapper: ColumnMapper) -> bool:
+        """
+        Decide whether this row is an export (goes to EXP sheet).
+
+        Rule:
+        - If POS code is OT  → always export (outside India as per user input)
+        - Otherwise fallback to old string-based heuristics (sales_channel, etc.)
+        - Credit/debit notes are never treated as export.
+        """
+
+        # 1) Never treat credit/debit rows as export
         if row.get("_is_credit_or_debit"):
             return False
-        candidates = [
-            safe_string(mapper.get_value(row, "sales_channel")),
-            row.get("_doc_type", ""),
-            safe_string(mapper.get_value(row, "source_of_supply")),
-            safe_string(mapper.get_value(row, "unique_type")),
-            row.get("_supply_text", ""),
-        ]
-        for value in candidates:
-            lowered = (value or "").lower()
-            if lowered.startswith("exp "):
-                return True
-            if "export" in lowered:
-                return True
+
+        # 2) Strong rule: POS = OT means export
+        pos_code = row.get("_pos_code")
+        if str(pos_code).upper() == "OT":
+            return True
+
+        # 3) Fallback: legacy / text-based export detection
+        # candidates = [
+        #     safe_string(mapper.get_value(row, "sales_channel")),
+        #     row.get("_doc_type", ""),
+        #     safe_string(mapper.get_value(row, "source_of_supply")),
+        #     safe_string(mapper.get_value(row, "unique_type")),
+        #     row.get("_supply_text", ""),
+        # ]
+
+        # for value in candidates:
+        #     lowered = (value or "").lower()
+        #     if lowered.startswith("exp "):
+        #         return True
+        #     if "export" in lowered:
+        #         return True
+
         return False
+
 
     @staticmethod
     def _resolve_export_type(row: pd.Series) -> str:
-        text = (row.get("_supply_text") or "").lower()
-        if "with payment" in text or "wpay" in text:
-            return "WPAY"
-        return "WOPAY"
+        """
+        Export type:
+        - WPAY  → Export with payment of tax (IGST > 0)
+        - WOPAY → Export without payment of tax (IGST = 0)
+        """
+        igst = row.get("_igst_amount")
+
+        try:
+            igst_val = float(igst or 0)
+        except:
+            igst_val = 0
+
+        return "WPAY" if igst_val > 0 else "WOPAY"
+    

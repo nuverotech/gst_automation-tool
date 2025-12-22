@@ -3,7 +3,11 @@ import pandas as pd
 from datetime import datetime
 
 from app.gstr1.utils.gst_utils import round_money
-from app.gstr1.utils.state_codes import format_place_of_supply
+from app.gstr1.utils.state_codes import (
+    normalize_pos_code,
+    state_code_from_value,
+    format_place_of_supply
+)
 
 
 class B2BBuilder:
@@ -25,17 +29,21 @@ class B2BBuilder:
     GSTIN_REGEX = re.compile(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$")
     VALID_GST_RATES = {0, 0.1, 0.25, 1, 1.5, 3, 5, 12, 18, 28}
 
+    # ---------------------------------------------------------
+    # MAP INVOICE TYPE
+    # ---------------------------------------------------------
     def map_invoice_type(self, value):
-        """Convert internal invoice type → allowed GST dropdown value."""
         if not value:
             return "Regular B2B"
 
         v = str(value).lower()
 
         if "sez" in v:
-            if "without" in v:
-                return "SEZ supplies without payment"
-            return "SEZ supplies with payment"
+            return (
+                "SEZ supplies without payment"
+                if "without" in v
+                else "SEZ supplies with payment"
+            )
 
         if "deemed" in v:
             return "Deemed Exp"
@@ -45,9 +53,9 @@ class B2BBuilder:
 
         return "Regular B2B"
 
-    # -------------------------------
-    # VALIDATORS (ALL INLINE)
-    # -------------------------------
+    # ---------------------------------------------------------
+    # VALIDATORS
+    # ---------------------------------------------------------
     def validate_gstin(self, gstin):
         if not gstin:
             return False, "GSTIN required"
@@ -104,20 +112,25 @@ class B2BBuilder:
             return False, "Invoice Type invalid"
         return True, None
 
-    def validate_pos(self, pos):
-        if not pos or "-" not in str(pos):
-            return False, "Invalid POS"
+    def validate_pos(self, formatted_pos):
+        """
+        POS must be in format '27-Maharashtra'
+        """
+        if not formatted_pos or "-" not in str(formatted_pos):
+            return False, "Invalid POS format"
         return True, None
 
-    # -------------------------------
-    # MAIN BUILD METHOD
-    # -------------------------------
+    # ---------------------------------------------------------
+    # MAIN BUILD
+    # ---------------------------------------------------------
     def build(self, df: pd.DataFrame, headers):
+
         mask = (
             df["_has_valid_gstin"]
             & (~df["_is_credit_or_debit"])
             & (~df["_is_export"])
         )
+
         subset = df[mask]
 
         if subset.empty:
@@ -128,10 +141,11 @@ class B2BBuilder:
         errors = []
 
         for idx, r in subset.iterrows():
-
             row = {}
 
+            # --------------------------
             # GSTIN
+            # --------------------------
             ok, err = self.validate_gstin(r["_gstin"])
             if not ok:
                 errors.append((idx, err))
@@ -158,15 +172,43 @@ class B2BBuilder:
             # Invoice Value
             row[h["Invoice Value"]] = round_money(r["_invoice_value"])
 
-            # POS
-            pos = format_place_of_supply(r["_pos_code"])
-            ok, err = self.validate_pos(pos)
+            # ---------------------------------
+            # TAX REQUIREMENTS (must be taxable)
+            # ---------------------------------
+            if float(r["_invoice_value"] or 0) <= 0:
+                errors.append((idx, "Invoice Value must be > 0"))
+                continue
+
+            if float(r["_taxable_value"] or 0) <= 0:
+                errors.append((idx, "Taxable Value must be > 0"))
+                continue
+
+            if float(r["_rate"] or 0) <= 0:
+                errors.append((idx, "GST Rate must be > 0"))
+                continue
+
+            # ---------------------------------
+            # POS Normalization Pipeline
+            # ---------------------------------
+            raw_pos = r["_pos_code"]
+
+            # Step 1: Accept OT / MH / 27 / Maharashtra → normalize
+            pos_raw_normalized = normalize_pos_code(raw_pos)
+
+            # Step 2: POS → proper GST state code
+            pos_state_code = state_code_from_value(pos_raw_normalized)
+
+            # Step 3: Convert to final required format → "27-Maharashtra"
+            formatted_pos = format_place_of_supply(pos_state_code)
+
+            ok, err = self.validate_pos(formatted_pos)
             if not ok:
                 errors.append((idx, err))
                 continue
-            row[h["Place Of Supply"]] = pos
 
-            # Reverse Charge (always N)
+            row[h["Place Of Supply"]] = formatted_pos
+
+            # Reverse Charge
             row[h["Reverse Charge"]] = "N"
 
             # Invoice Type
@@ -209,8 +251,9 @@ class B2BBuilder:
             for e in errors:
                 print(f"  Row {e[0]} → {e[1]}")
 
-        # Build final DataFrame
+        # Final DF
         result = pd.DataFrame(rows)
+
         for col in headers:
             if col not in result.columns:
                 result[col] = None

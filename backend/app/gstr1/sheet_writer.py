@@ -10,7 +10,10 @@ from app.gstr1.sheet_builders.b2cs import B2CSBuilder
 from app.gstr1.sheet_builders.cdnr import CDNRBuilder
 from app.gstr1.sheet_builders.cdnur import CDNURBuilder
 from app.gstr1.sheet_builders.exp import EXPBuilder
-
+from app.gstr1.sheet_builders.hsnb2b import HSNB2BBuilder
+from app.gstr1.sheet_builders.hsnb2c import HSNB2CBuilder  
+from app.gstr1.sheet_builders.eco import ECOBuilder  
+from app.gstr1.sheet_builders.ecob2b import ECOB2BBuilder 
 
 class SheetWriter:
     """
@@ -35,6 +38,10 @@ class SheetWriter:
             CDNRBuilder,
             CDNURBuilder,
             EXPBuilder,
+            HSNB2BBuilder,  
+            HSNB2CBuilder,
+            # ECOBuilder,
+            # ECOB2BBuilder,
         ]
 
 
@@ -88,6 +95,9 @@ class SheetWriter:
                     final_df[col] = sheet_df[col]
 
             self._write_sheet_data(ws, final_df, headers)
+
+            # ✅ GENERIC dropdown restoration for all sheets
+            # self._extend_data_validations(ws, self.DATA_START_ROW_INDEX + 1)
 
         wb.save(self.output_path)
         print(f"✔️ GST Output written successfully → {self.output_path}")
