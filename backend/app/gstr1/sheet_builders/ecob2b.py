@@ -54,6 +54,7 @@ class ECOB2BBuilder:
         mask = (
             df["_ecommerce_gstin"].notna()
             & (df["_ecommerce_gstin"] != "")
+            & (df["_has_valid_gstin"])
             & (~df["_is_credit_or_debit"])
             & (~df["_is_export"])
         )

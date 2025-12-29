@@ -202,6 +202,18 @@ class GSTTransformer:
             axis=1,
         )
 
+        working["_is_cancelled"] = working.apply(
+            lambda r: safe_string(mapper.get_value(r, "status")).lower() in ("cancelled", "canceled", "void"),
+            axis=1,
+        )
+
+        # ------------------ ECO boolean flag based on sales channel ------------------
+        working["_sales_channel"] = working.apply(
+            lambda r: safe_string(mapper.get_value(r, "sales_channel")).lower(),
+            axis=1
+        )
+
+        working["_is_eco"] = working["_sales_channel"].apply(self._is_eco_channel)
 
         return working
 
@@ -441,4 +453,24 @@ class GSTTransformer:
             igst_val = 0
 
         return "WPAY" if igst_val > 0 else "WOPAY"
+    
+    @staticmethod
+    def _is_eco_channel(value: str) -> bool:
+        """
+        Returns True if the sales channel belongs to known e-commerce portals.
+        """
+        eco_channels = {
+            "ajio", "amazon",  "amazon internal", "internal amazon.in", "amazon.in",
+            "blinkit", "firstcry", "flipkart", "myntra", "shopify",
+            "shopify uae", "slikk", "swiggy instamart", "instamart",
+            "tata cliq", "swiggy"
+        }
+
+        if not value:
+            return False
+
+        value = value.strip().lower()
+        return any(ch in value for ch in eco_channels)  # substring check
+        # For exact match instead use: return value in eco_channels
+
     

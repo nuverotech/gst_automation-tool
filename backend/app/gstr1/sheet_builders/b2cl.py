@@ -98,6 +98,7 @@ class B2CLBuilder:
         # Identify B2CL rows
         mask = (
             (~df["_has_valid_gstin"])
+            # & (df["_ecommerce_gstin"].isna() | (df["_ecommerce_gstin"] == ""))
             & (~df["_is_credit_or_debit"])
             & (~df["_is_export"])
             & (~df["_is_same_state"])

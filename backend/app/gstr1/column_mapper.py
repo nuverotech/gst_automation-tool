@@ -57,6 +57,7 @@ DATA_COLUMN_KEYWORDS: Dict[str, List[str]] = {
     "quantity": ["quantity", "item quantity", "qty"],
     "total_value": ["total value", "value", "invoice line total"],
     "source_of_supply": ["source of supply", "source state", "state of supply"],
+    "sales_channel": ["sales channel", "channel"],
 
 }
 

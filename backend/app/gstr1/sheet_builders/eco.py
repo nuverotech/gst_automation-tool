@@ -52,8 +52,9 @@ class ECOBuilder:
         # ECO MASK (STRICT & CORRECT)
         # --------------------------------------------------
         mask = (
-            df["_ecommerce_gstin"].notna()
-            & (df["_ecommerce_gstin"] != "")
+            # df["_ecommerce_gstin"].notna()
+            # & (df["_ecommerce_gstin"] != "")
+            df["_is_eco"]
             & (~df["_is_credit_or_debit"])
             & (~df["_is_export"])
         )
@@ -74,7 +75,7 @@ class ECOBuilder:
         # --------------------------------------------------
         grouped = (
             subset.groupby(
-                ["_nature_of_supply", "_ecommerce_gstin", "_receiver_name"],
+                ["_nature_of_supply", "_ecommerce_gstin", "_sales_channel", "_source_of_supply"],
                 dropna=False,
             )
             .agg(
@@ -108,14 +109,21 @@ class ECOBuilder:
             row[h["Nature of Supply"]] = r["_nature_of_supply"]
 
             # E-Commerce GSTIN
-            ok, err = self.validate_gstin(r["_ecommerce_gstin"])
-            if not ok:
-                errors.append((idx, err))
-                continue
-            row[h["GSTIN of E-Commerce Operator"]] = r["_ecommerce_gstin"]
+            # ----------------- GSTIN validation only when provided -----------------
+            gst = r["_ecommerce_gstin"]
+
+            if gst:  # validate only if GSTIN exists (not blank/None)
+                ok, err = self.validate_gstin(gst)
+                if not ok:
+                    errors.append((idx, err))
+                    continue
+
+            # Write GSTIN even if blank (no validation needed)
+            row[h["GSTIN of E-Commerce Operator"]] = gst
+
 
             # Operator Name
-            row[h["E-Commerce Operator Name"]] = r["_receiver_name"] or None
+            row[h["E-Commerce Operator Name"]] = r["_sales_channel"]
 
             # Net Value of Supplies
             ok, err = self.validate_amount(

@@ -71,13 +71,18 @@ class HSNB2BBuilder:
             row = {}
 
             if "HSN" in h:
-                row[h["HSN"]] = r["_hsn"]
+                hsn_val = r["_hsn"]
+                if hsn_val not in ("", None):
+                    row[h["HSN"]] = int(float(hsn_val))
+                else:
+                    row[h["HSN"]] = ""
+
 
             if "Description" in h:
                 row[h["Description"]] = r["_description"]
 
             if "UQC" in h:
-                row[h["UQC"]] = r["_uqc"]
+                row[h["UQC"]] = "PCS-PIECES"
 
             if "Total Quantity" in h:
                 row[h["Total Quantity"]] = round_money(r["_quantity"])
