@@ -23,7 +23,7 @@ def parse_excel_or_date(value) -> Optional[date]:
         except Exception:
             pass
 
-    parsed = pd.to_datetime(value, errors="coerce")
+    parsed = pd.to_datetime(value, errors="coerce", dayfirst=True)
     if pd.isna(parsed):
         return None
     return parsed.date()
