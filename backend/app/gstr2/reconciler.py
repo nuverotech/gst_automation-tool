@@ -1,22 +1,3 @@
-"""
-GSTR-2B B2B Reconciliation Logic
---------------------------------
-Identity:
-    Supplier GSTIN + Invoice No + Invoice Date
-
-Comparison:
-    Taxable Value
-
-Outcomes:
-    - Matched
-    - Not Matched
-    - Not in Books
-    - Not Found in 2B
-"""
-
-from app.gstr1.utils.gst_utils import safe_string, to_float, round_money
-from app.gstr1.utils.date_utils import parse_excel_or_date
-
 from app.utils.logger import setup_logger
 
 logger = setup_logger(
@@ -25,78 +6,186 @@ logger = setup_logger(
 )
 
 
-def _make_key(gstin, invoice_no, invoice_date):
-    return (
-        safe_string(gstin),
-        safe_string(invoice_no),
-        parse_excel_or_date(invoice_date),
-    )
+# def reconcile_b2b(gstr2b_rows, purchase_rows):
+#     results = []
+#     used_purchase_indexes = set()
 
+#     logger.info(f"GSTR2B rows: {len(gstr2b_rows)}")
+#     logger.info(f"Purchase rows: {len(purchase_rows)}")
+
+#     # -------------------------------------------------
+#     # PASS 1: GSTR-2B → PURCHASE BOOKS
+#     # -------------------------------------------------
+#     for g in gstr2b_rows:
+#         exact_match_index = None
+#         partial_match_found = False
+
+#         for idx, p in enumerate(purchase_rows):
+#             if idx in used_purchase_indexes:
+#                 continue
+
+#             if g["gstin"] == p["gstin"] and g["invoice_no"] == p["invoice_no"]:
+#                 partial_match_found = True
+
+#                 if (
+#                     g["taxable_value"] == p["taxable_value"]
+#                     # and g["cgst"] == p["cgst"]
+#                     # and g["sgst"] == p["sgst"]
+#                     # and g["igst"] == p["igst"]
+#                     # and g["total"] == p["total"]
+#                 ):
+#                     exact_match_index = idx
+#                     break
+
+#         if exact_match_index is not None:
+#             used_purchase_indexes.add(exact_match_index)
+#             comment = "Matched"
+#         elif partial_match_found:
+#             comment = "Not Matched"
+#         else:
+#             comment = "Not in Books"
+
+#         results.append({
+#             "gstin": g["gstin"],
+#             "invoice_no": g["invoice_no"],
+#             "invoice_date": g["invoice_date"],
+#             "taxable_value": g["taxable_value"],
+#             # "cgst": g["cgst"],
+#             # "sgst": g["sgst"],
+#             # "igst": g["igst"],
+#             # "total": g["total"],
+#             "comment": comment,
+#         })
+
+#     # -------------------------------------------------
+#     # PASS 2: PURCHASE BOOKS → GSTR-2B
+#     # -------------------------------------------------
+#     for idx, p in enumerate(purchase_rows):
+#         if idx in used_purchase_indexes:
+#             continue
+
+#         results.append({
+#             "gstin": p["gstin"],
+#             "invoice_no": p["invoice_no"],
+#             "invoice_date": p["invoice_date"],
+#             "taxable_value": p["taxable_value"],
+#             # "cgst": p["cgst"],
+#             # "sgst": p["sgst"],
+#             # "igst": p["igst"],
+#             # "total": p["total"],
+#             "comment": "Not Found in 2B",
+#         })
+
+#     logger.info(f"Final reconciled rows: {len(results)}")
+#     return results
 
 def reconcile_b2b(gstr2b_rows, purchase_rows):
-    output_rows = []
-    matched_purchase_keys = set()
+    results = []
 
-    logger.info(f"GSTR2B rows received: {len(gstr2b_rows)}")
-    logger.info(f"Purchase rows received: {len(purchase_rows)}")
+    # 🔑 track purchase rows seen in 2B (identity match)
+    identity_matched_indexes = set()
 
-    # -----------------------------
-    # PASS 1: GSTR2B → Purchase
-    # -----------------------------
-    for row in gstr2b_rows:
-        key = _make_key(
-            row["supplier_gstin"],
-            row["invoice_no"],
-            row["invoice_date"],
+    # 🔑 track exact matches (optional, for stats/debug)
+    exact_matched_indexes = set()
+
+    logger.info(
+        f"START RECONCILIATION | "
+        f"GSTR2B={len(gstr2b_rows)} PURCHASE={len(purchase_rows)}"
+    )
+
+    # -------------------------------------------------
+    # PASS 1: GSTR-2B → PURCHASE BOOKS
+    # -------------------------------------------------
+    for g in gstr2b_rows:
+        exact_match_index = None
+        partial_match_index = None
+
+        logger.debug(
+            f"CHECKING 2B INVOICE | GSTIN={g['gstin']} | "
+            f"INV={g['invoice_no']} | TAXABLE_2B={g['taxable_value']}"
         )
 
-        gstr_value = round_money(to_float(row["taxable_value"]))
+        for idx, p in enumerate(purchase_rows):
 
-        if key not in purchase_rows:
-            comment = "Not in Books"
-            book_value = None
-            logger.info(f"[NOT IN BOOKS] {key}")
-        else:
-            book_value = round_money(to_float(purchase_rows[key]))
-            matched_purchase_keys.add(key)
+            # skip already exactly matched rows
+            if idx in exact_matched_indexes:
+                continue
 
-            if gstr_value == book_value:
-                comment = "Matched"
-                logger.info(f"[MATCHED] {key} VALUE={gstr_value}")
-            else:
-                comment = "Not Matched"
-                logger.info(
-                    f"[MISMATCH] {key} GSTR2B={gstr_value} BOOKS={book_value}"
+            if g["gstin"] == p["gstin"] and g["invoice_no"] == p["invoice_no"]:
+                identity_matched_indexes.add(idx)
+                partial_match_index = idx
+
+                logger.debug(
+                    f"  FOUND BOOK ENTRY | GSTIN={p['gstin']} | "
+                    f"INV={p['invoice_no']} | TAXABLE_BOOK={p['taxable_value']}"
                 )
 
-        output_rows.append({
-            "sheet": "B2B",
-            "supplier_gstin": key[0],
-            "invoice_no": key[1],
-            "invoice_date": key[2],
-            "gstr2b_taxable_value": gstr_value,
-            "book_taxable_value": book_value,
+                if g["taxable_value"] == p["taxable_value"]:
+                    exact_match_index = idx
+                    exact_matched_indexes.add(idx)
+
+                    logger.info(
+                        f"MATCHED | GSTIN={g['gstin']} | INV={g['invoice_no']} | "
+                        f"DATE={g['invoice_date']} | "
+                        f"TAXABLE=2B({g['taxable_value']}) == BOOK({p['taxable_value']})"
+                    )
+                    break
+
+        if exact_match_index is not None:
+            comment = "Matched"
+
+        elif partial_match_index is not None:
+            p = purchase_rows[partial_match_index]
+            comment = "Not Matched"
+
+            logger.warning(
+                f"NOT MATCHED | GSTIN={g['gstin']} | INV={g['invoice_no']} | "
+                f"DATE={g['invoice_date']} | "
+                f"TAXABLE=2B({g['taxable_value']}) != BOOK({p['taxable_value']})"
+            )
+
+        else:
+            comment = "Not in Books"
+            logger.error(
+                f"NOT IN BOOKS | GSTIN={g['gstin']} | INV={g['invoice_no']} | "
+                f"DATE={g['invoice_date']} | TAXABLE_2B={g['taxable_value']}"
+            )
+
+        results.append({
+            "gstin": g["gstin"],
+            "invoice_no": g["invoice_no"],
+            "invoice_date": g["invoice_date"],
+            "taxable_value": g["taxable_value"],
             "comment": comment,
         })
 
-    # -----------------------------
-    # PASS 2: Purchase → Missing in 2B
-    # -----------------------------
-    for key, book_value in purchase_rows.items():
-        if key in matched_purchase_keys:
+    logger.info(
+        f"IDENTITY MATCHED PURCHASE INDEXES={identity_matched_indexes} "
+        f"COUNT={len(identity_matched_indexes)}"
+    )
+
+    # -------------------------------------------------
+    # PASS 2: PURCHASE BOOKS → GSTR-2B
+    # -------------------------------------------------
+    for idx, p in enumerate(purchase_rows):
+
+        # ❗ exclude ALL purchase rows already seen in 2B
+        if idx in identity_matched_indexes:
             continue
 
-        logger.info(f"[NOT FOUND IN 2B] {key}")
+        logger.error(
+            f"NOT FOUND IN 2B | GSTIN={p['gstin']} | "
+            f"INV={p['invoice_no']} | DATE={p['invoice_date']} | "
+            f"TAXABLE_BOOK={p['taxable_value']} | INDEX={idx}"
+        )
 
-        output_rows.append({
-            "sheet": "B2B",
-            "supplier_gstin": key[0],
-            "invoice_no": key[1],
-            "invoice_date": key[2],
-            "gstr2b_taxable_value": None,
-            "book_taxable_value": round_money(to_float(book_value)),
+        results.append({
+            "gstin": p["gstin"],
+            "invoice_no": p["invoice_no"],
+            "invoice_date": p["invoice_date"],
+            "taxable_value": p["taxable_value"],
             "comment": "Not Found in 2B",
         })
 
-    logger.info(f"Final reconciled rows: {len(output_rows)}")
-    return output_rows
+    logger.info(f"END RECONCILIATION | TOTAL_OUTPUT_ROWS={len(results)}")
+    return results
