@@ -1,7 +1,7 @@
-from openpyxl import load_workbook
+import json
+from pathlib import Path
 
-from app.gstr1.utils.date_utils import parse_excel_or_date
-from app.gstr1.utils.gst_utils import safe_string, to_float
+from app.gstr1.utils.gst_utils import safe_string
 from app.gstr2.reconciler import reconcile_b2b
 from app.utils.logger import setup_logger
 
@@ -10,11 +10,10 @@ logger = setup_logger(
     log_file="logs/gstr2_processor.log"
 )
 
-
 # -------------------------------------------------
-# Robust header detector
+# Header detection (UNCHANGED)
 # -------------------------------------------------
-def _detect_header_row(ws, required_headers, max_scan_rows=20):
+def detect_header_row(ws, required_headers, max_scan_rows=20):
     best_match = {"row": None, "score": 0, "col_map": {}}
 
     for row_idx in range(1, max_scan_rows):
@@ -59,150 +58,72 @@ def _detect_header_row(ws, required_headers, max_scan_rows=20):
 
 
 # -------------------------------------------------
-# Purchase Register Reader (AGGREGATED)
+# MULTI-STATE PROCESSOR (POS-BASED)
 # -------------------------------------------------
-def _read_purchase_register(purchase_path: str) -> list[dict]:
-    wb = load_workbook(purchase_path, data_only=True)
-    ws = wb.active
-
-    REQUIRED_HEADERS = {
-        "gstin": {"GSTIN", "SUPPLIER GSTIN", "VENDOR GSTN"},
-        "invoice_no": {"INVOICE NO", "BILL NUMBER", "DOCUMENT NO"},
-        "invoice_date": {"INVOICE DATE", "DATE"},
-        "taxable_value": {"TAXABLE VALUE", "TOTAL PRICE"},
-    }
-
-    header_row, col_map = _detect_header_row(ws, REQUIRED_HEADERS)
-    logger.info(f"Purchase header detected at row {header_row}")
-
-    # -------------------------------------------------
-    # aggregation buckets
-    # -------------------------------------------------
-    aggregated_sum = {}     # key -> float
-    aggregated_count = {}   # key -> int
-    aggregated_lines = {}   # key -> list[float]
-
-    for excel_row_no, r in enumerate(
-        ws.iter_rows(min_row=header_row + 1, values_only=True),
-        start=header_row + 1,
-    ):
-        gstin = safe_string(r[col_map["gstin"]])
-        invoice_no = safe_string(r[col_map["invoice_no"]])
-        invoice_date = parse_excel_or_date(r[col_map["invoice_date"]])
-        taxable_value = to_float(r[col_map["taxable_value"]]) or 0.0
-
-        if not gstin or not invoice_no or not invoice_date:
-            continue
-
-        key = (gstin, invoice_no, invoice_date)
-
-        if key not in aggregated_sum:
-            aggregated_sum[key] = 0.0
-            aggregated_count[key] = 0
-            aggregated_lines[key] = []
-
-        aggregated_sum[key] += taxable_value
-        aggregated_count[key] += 1
-        aggregated_lines[key].append(taxable_value)
-
-        logger.debug(
-            f"PURCHASE LINE | ROW={excel_row_no} | GSTIN={gstin} | "
-            f"INV={invoice_no} | DATE={invoice_date} | TAXABLE={taxable_value}"
-        )
-
-    # -------------------------------------------------
-    # convert aggregated → invoice-level rows
-    # -------------------------------------------------
-    rows = []
-
-    for (gstin, invoice_no, invoice_date), total in aggregated_sum.items():
-        count = aggregated_count[(gstin, invoice_no, invoice_date)]
-        lines = aggregated_lines[(gstin, invoice_no, invoice_date)]
-
-        logger.info(
-            f"AGGREGATED PURCHASE INVOICE | GSTIN={gstin} | "
-            f"INV={invoice_no} | DATE={invoice_date} | "
-            f"ROWS={count} | "
-            f"LINE_VALUES={lines} | "
-            f"TOTAL_TAXABLE={round(total, 2)}"
-        )
-
-        rows.append({
-            "gstin": gstin,
-            "invoice_no": invoice_no,
-            "invoice_date": invoice_date,
-            "taxable_value": round(total, 2),
-        })
-
-    logger.info(
-        f"Purchase aggregation completed | "
-        f"RAW_ROWS={ws.max_row - header_row} | "
-        f"INVOICE_ROWS={len(rows)}"
+def process_b2b_multi_state(purchase_path: str, gstr2b_paths: list[str]) -> dict:
+    from app.gstr2.sheet_reader.b2b import (
+        read_purchase_register,
+        read_gstr2b_b2b,
     )
 
-    return rows
+    logger.info("START MULTI-STATE RECONCILIATION")
 
+    all_purchase_rows = read_purchase_register(purchase_path)
 
-
-# -------------------------------------------------
-# GSTR-2B B2B Reader (INVOICE LEVEL)
-# -------------------------------------------------
-def _read_gstr2b_b2b(gstr2b_path: str) -> list[dict]:
-    wb = load_workbook(gstr2b_path, data_only=True)
-
-    if "B2B" not in wb.sheetnames:
-        raise ValueError("B2B sheet not found in GSTR-2B")
-
-    ws = wb["B2B"]
-
-    REQUIRED_HEADERS = {
-        "gstin": {"gstin of supplier"},
-        "invoice_no": {"invoice number"},
-        "invoice_date": {"invoice date"},
-        "taxable_value": {"taxable value"},
+    state_wise = {}
+    overall = {
+        "matched": 0,
+        "not_matched": 0,
+        "not_in_books": 0,
+        "not_in_2b": 0,
     }
 
-    header_row, col_map = _detect_header_row(ws, REQUIRED_HEADERS)
-    logger.info(f"GSTR2B header detected at row {header_row}")
+    for gstr2b_path in gstr2b_paths:
+        gstr2b_rows = read_gstr2b_b2b(gstr2b_path)
 
-    rows = []
+        states = {r["pos_state"] for r in gstr2b_rows}
+        if len(states) != 1:
+            raise ValueError(f"Multiple POS states in {gstr2b_path}")
 
-    for r in ws.iter_rows(min_row=header_row + 1, values_only=True):
-        gstin = safe_string(r[col_map["gstin"]])
-        invoice_no = safe_string(r[col_map["invoice_no"]])
+        state = states.pop()
+        logger.info(f"PROCESSING STATE={state}")
 
-        if not gstin or not invoice_no:
-            continue
+        purchase_rows = [
+            p for p in all_purchase_rows
+            if p["pos_state"] == state
+        ]
 
-        rows.append({
-            "gstin": gstin,
-            "invoice_no": invoice_no,
-            "invoice_date": parse_excel_or_date(r[col_map["invoice_date"]]),
-            "taxable_value": to_float(r[col_map["taxable_value"]]),
-        })
+        reconciled = reconcile_b2b(
+            gstr2b_rows=gstr2b_rows,
+            purchase_rows=purchase_rows,
+        )
 
-    logger.info(f"GSTR2B rows read: {len(rows)}")
-    return rows
+        summary = {
+            "total_rows": len(reconciled),
+            "matched": sum(r["comment"] == "Matched" for r in reconciled),
+            "not_matched": sum(r["comment"] == "Not Matched" for r in reconciled),
+            "not_in_books": sum(r["comment"] == "Not in Books" for r in reconciled),
+            "not_in_2b": sum(r["comment"] == "Not Found in 2B" for r in reconciled),
+        }
 
+        state_wise[state] = summary
 
-# -------------------------------------------------
-# Public Entry Point
-# -------------------------------------------------
-def process_b2b_single_state(purchase_path: str, gstr2b_path: str) -> dict:
-    purchase_rows = _read_purchase_register(purchase_path)
-    gstr2b_rows = _read_gstr2b_b2b(gstr2b_path)
+        for k in overall:
+            overall[k] += summary[k]
 
-    reconciled_rows = reconcile_b2b(
-        gstr2b_rows=gstr2b_rows,
-        purchase_rows=purchase_rows,
-    )
-
-    summary = {
-        "total_rows": len(reconciled_rows),
-        "matched": sum(r["comment"] == "Matched" for r in reconciled_rows),
-        "not_matched": sum(r["comment"] == "Not Matched" for r in reconciled_rows),
-        "not_in_books": sum(r["comment"] == "Not in Books" for r in reconciled_rows),
-        "not_in_2b": sum(r["comment"] == "Not Found in 2B" for r in reconciled_rows),
+    final_result = {
+        "state_wise": state_wise,
+        "overall": overall,
     }
 
-    return summary
+    # 🔵 NEW CODE: WRITE SUMMARY TO FILE
+    logs_dir = Path("logs")
+    logs_dir.mkdir(exist_ok=True)
+
+    summary_file = logs_dir / "gstr2_state_wise_summary.json"
+    with summary_file.open("w", encoding="utf-8") as f:
+        json.dump(final_result, f, indent=2)
+
+    logger.info(f"STATE-WISE SUMMARY WRITTEN TO {summary_file}")
+
+    return final_result

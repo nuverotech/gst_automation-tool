@@ -45,3 +45,5 @@ frontend/.next/
 backend/uploads
 backend/processed
 backend/user_templates
+backend/app/gstr2/2b_files
+backend/logs
