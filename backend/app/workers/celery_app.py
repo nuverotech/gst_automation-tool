@@ -20,8 +20,9 @@ celery_app.conf.update(
         'app.workers.tasks.process_file',
         'app.workers.tasks.validate_data',
         'app.workers.tasks.generate_template',
+        'app.workers.tasks.process_gstr2b',
     ]
 )
 
 # Import tasks after app configuration
-from app.workers.tasks import process_file, validate_data, generate_template
+from app.workers.tasks import process_file, validate_data, generate_template, process_gstr2b

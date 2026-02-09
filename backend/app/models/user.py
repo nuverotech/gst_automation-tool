@@ -24,6 +24,7 @@ class User(Base):
     
     # Relationship to uploads
     uploads = relationship("Upload", back_populates="user")
+    gstr2b_jobs = relationship("GSTR2BProcessing", back_populates="user")
     
     def __repr__(self):
         return f"<User {self.username}: {self.email}>"

@@ -71,6 +71,13 @@ export default function DashboardPage() {
               <p className="text-sm text-gray-600">Welcome back, {user.full_name || user.username}!</p>
             </div>
             <div className="flex items-center space-x-4">
+              <button
+                onClick={() => router.push('/gstr2b')}
+                className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>GSTR 2-B</span>
+              </button>
               <div className="flex items-center space-x-2 text-sm text-gray-600">
                 <User className="w-4 h-4" />
                 <span>{user.email}</span>

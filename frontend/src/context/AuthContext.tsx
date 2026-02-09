@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('access_token', response.access_token)
       const userData = await getCurrentUser()
       setUser(userData)
-      router.push('/dashboard')
+      router.push('/select-gst-type')
     } catch (error: any) {
       throw new Error(error.response?.data?.detail || 'Login failed')
     }
